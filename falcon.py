@@ -200,7 +200,7 @@ class SecretKey:
         if generate:
             self.generate()
 
-    def generate(self, n=512, polys=None):
+    def generate(self, n:int = 512, generateKey:bool = True, polys:list=None):
         """Initialize a secret key."""
         # Public parameters
         self.n = n
@@ -210,15 +210,17 @@ class SecretKey:
         self.sig_bytelen = Params[n]["sig_bytelen"]
 
         # Compute NTRU polynomials f, g, F, G verifying fG - gF = q mod Phi
-        if polys is None:
-            self.f, self.g, self.F, self.G = ntru_gen(n)
-        else:
+        if polys is not None:
             [f, g, F, G] = polys
             assert all((len(poly) == n) for poly in [f, g, F, G])
             self.f = f[:]
             self.g = g[:]
             self.F = F[:]
             self.G = G[:]
+        elif generateKey is True:
+            self.f, self.g, self.F, self.G = ntru_gen(n)
+        else:
+            return
 
         # From f, g, F, G, compute the basis B0 of a NTRU lattice
         # as well as its Gram matrix and their fft's.
@@ -375,7 +377,34 @@ class SecretKey:
 
         # If all checks are passed, accept
         return True
+    
+    def loadSecretKey(self, path:int = './falconSecretKey.key'):
+        from base64 import b85decode
+        with open(path, 'rb') as f:
+            secretKeyBytes = f.read()
+            nStringStart = secretKeyBytes.find(b'PARAMS:')+len(b'PARAMS:')
+            startf = secretKeyBytes.find(b'PARTf:')
+            startg = secretKeyBytes.find(b'PARTg:')
+            startF = secretKeyBytes.find(b'PARTF:')
+            startG = secretKeyBytes.find(b'PARTG:')
+            n = int(secretKeyBytes[nStringStart:startf])
+            f = deserialize_naive(b85decode(secretKeyBytes[startf+len(b'PARTf:'):startg]), True)
+            g = deserialize_naive(b85decode(secretKeyBytes[startg+len(b'PARTg:'):startF]), True)
+            F = deserialize_naive(b85decode(secretKeyBytes[startF+len(b'PARTF:'):startG]), True)
+            G = deserialize_naive(b85decode(secretKeyBytes[startG+len(b'PARTG:'):]), True)
+        self.generate(n=n, polys=[f,g,F,G])
+    
+    def saveSecretKey(self, path:int = './falconSecretKey.key'):
+        from base64 import b85encode
 
+        paramsSet = 'PARAMS:'+str(self.n)
+        bytesf = 'PARTf:' + b85encode(serialize_naive(self.f, signed=True)).decode('ascii')
+        bytesg = 'PARTg:' + b85encode(serialize_naive(self.g, signed=True)).decode('ascii')
+        bytesF = 'PARTF:' + b85encode(serialize_naive(self.F, signed=True)).decode('ascii')
+        bytesG = 'PARTG:' + b85encode(serialize_naive(self.G, signed=True)).decode('ascii')
+
+        with open(path, 'w') as f:
+            f.write(paramsSet+bytesf+bytesg+bytesF+bytesG)
 
 class PublicKey(SecretKey):
     """
@@ -420,15 +449,13 @@ class PublicKey(SecretKey):
         from base64 import b85encode
         
         paramsSet = 'PARAMS:'+str(self.n)
-        publicPolynomialBytes = serialize_naive(self.h)
-
-        publicPolynomial = 'POLY:' + b85encode(publicPolynomialBytes).decode('ascii')
+        publicPolynomial = 'POLY:' + b85encode(serialize_naive(self.h)).decode('ascii')
         
         with open(path,'w') as f:
             f.write(paramsSet+publicPolynomial)
     
 
-def serialize_naive(input_list:list[int] = []) -> bytes:
+def serialize_naive(input_list:list[int] = [], signed:bool = False) -> bytes:
     from math import ceil, log2
     
     max_value = max(input_list)
@@ -438,7 +465,7 @@ def serialize_naive(input_list:list[int] = []) -> bytes:
     byte_string = b''
 
     for chunk in input_list:
-        byte_string += chunk.to_bytes(*byte_encoding_params)
+        byte_string += chunk.to_bytes(*byte_encoding_params, signed=signed)
 
     #bbytes = bytes_per_element_naive.to_bytes(length=1, byteorder='little')
     #print(f'Serialize: bytes per element: {bytes_per_element_naive}, bytes: {bbytes}')
@@ -446,7 +473,7 @@ def serialize_naive(input_list:list[int] = []) -> bytes:
     return bytes_per_element_naive.to_bytes(length=1, byteorder='little') + byte_string
 
 
-def deserialize_naive(input_bytes: bytes):
+def deserialize_naive(input_bytes: bytes, signed:bool = False) -> list:
 
     #print(type(input_bytes))
     #print(input_bytes)
@@ -457,18 +484,32 @@ def deserialize_naive(input_bytes: bytes):
     for chunk in range(1,len(input_bytes),bytes_per_element_naive):
         #print(chunk)
         #print(int.from_bytes(input_bytes[chunk:chunk+bytes_per_element_naive], 'little'))
-        output_list.append(int.from_bytes(input_bytes[chunk:chunk+bytes_per_element_naive], 'little'))
+        output_list.append(int.from_bytes(input_bytes[chunk:chunk+bytes_per_element_naive], 'little', signed=signed))
 
     return output_list
 
 if __name__ == "__main__":
     sk = SecretKey()
     pk = PublicKey(sk)
+
+    newsk = SecretKey(generate=False)
+    newpk = PublicKey()
+
+    sk.saveSecretKey()
     pk.savePublicKey()
 
     msg = b'hello world'
     sig = sk.sign(msg)
 
-    newpk = PublicKey()
     newpk.loadPublicKey()
-    print(newpk.verify(msg, sig))
+    print(f'Verified Sig? {newpk.verify(msg, sig)}')
+
+    newsk.loadSecretKey()
+
+    print(f'sk.f ?= newsk.f? {newsk.f == sk.f}')
+    print(f'sk.g ?= newsk.g? {newsk.g == sk.g}')
+    print(f'sk.F ?= newsk.F? {newsk.F == sk.F}')
+    print(f'sk.G ?= newsk.G? {newsk.G == sk.G}')
+
+    print(f'Verified Sig (with newsk)? {newsk.verify(msg, sig)}')
+
