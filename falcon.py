@@ -180,26 +180,6 @@ def normalize_tree(tree, sigma):
         tree[1] = 0
 
 
-class PublicKey:
-    """
-    This class contains methods for performing public key operations in Falcon.
-    """
-
-    def __init__(self, sk):
-        """Initialize a public key."""
-        self.n = sk.n
-        self.h = sk.h
-        self.hash_to_point = sk.hash_to_point
-        self.signature_bound = sk.signature_bound
-        self.verify = sk.verify
-
-    def __repr__(self):
-        """Print the object in readable form."""
-        rep = "Public for n = {n}:\n\n".format(n=self.n)
-        rep += "h = {h}\n".format(h=self.h)
-        return rep
-
-
 class SecretKey:
     """
     This class contains methods for performing
@@ -216,7 +196,11 @@ class SecretKey:
     - verify the signature of a message
     """
 
-    def __init__(self, n, polys=None):
+    def __init__(self, generate=True):
+        if generate:
+            self.generate()
+
+    def generate(self, n=512, polys=None):
         """Initialize a secret key."""
         # Public parameters
         self.n = n
@@ -364,6 +348,7 @@ class SecretKey:
         """
         Verify a signature.
         """
+        #print(self.h)
         # Unpack the salt and the short polynomial s1
         salt = signature[HEAD_LEN:HEAD_LEN + SALT_LEN]
         enc_s = signature[HEAD_LEN + SALT_LEN:]
@@ -376,6 +361,8 @@ class SecretKey:
 
         # Compute s0 and normalize its coefficients in (-q/2, q/2]
         hashed = self.hash_to_point(message, salt)
+        #print(hashed)
+        #print(s1)
         s0 = sub_zq(hashed, mul_zq(s1, self.h))
         s0 = [(coef + (q >> 1)) % q - (q >> 1) for coef in s0]
 
@@ -388,3 +375,100 @@ class SecretKey:
 
         # If all checks are passed, accept
         return True
+
+
+class PublicKey(SecretKey):
+    """
+    This class contains methods for performing public key operations in Falcon.
+    """
+
+    def __init__(self, sk:SecretKey = None):
+        """Initialize a public key."""
+        if sk != None:
+            self.n = sk.n
+            self.h = sk.h
+            self.hash_to_point = sk.hash_to_point
+            self.signature_bound = sk.signature_bound
+            self.verify = sk.verify
+
+    def __repr__(self):
+        """Print the object in readable form."""
+        rep = "Public for n = {n}:\n\n".format(n=self.n)
+        rep += "h = {h}\n".format(h=self.h)
+        return rep
+    
+    def loadPublicKey(self, path:str = './falconPubKey.pub'):
+        from base64 import b85decode
+        with open(path, 'rb') as f:
+            publicKeyBytes = f.read()
+            nStringStart = publicKeyBytes.find(b'PARAMS:')+len(b'PARAMS:')
+            nStringEnd = publicKeyBytes.find(b'POLY:')
+            n = int(publicKeyBytes[nStringStart:nStringEnd])
+            h = deserialize_naive(b85decode(publicKeyBytes[nStringEnd+len(b'POLY:'):]))
+
+        # Public parameters
+        self.n = n
+        self.sigma = Params[n]["sigma"]
+        self.sigmin = Params[n]["sigmin"]
+        self.signature_bound = Params[n]["sig_bound"]
+        self.sig_bytelen = Params[n]["sig_bytelen"]
+
+        # load h
+        self.h = h
+
+    def savePublicKey(self, path:str = './falconPubKey.pub'):
+        from base64 import b85encode
+        
+        paramsSet = 'PARAMS:'+str(self.n)
+        publicPolynomialBytes = serialize_naive(self.h)
+
+        publicPolynomial = 'POLY:' + b85encode(publicPolynomialBytes).decode('ascii')
+        
+        with open(path,'w') as f:
+            f.write(paramsSet+publicPolynomial)
+    
+
+def serialize_naive(input_list:list[int] = []) -> bytes:
+    from math import ceil, log2
+    
+    max_value = max(input_list)
+    bytes_per_element_naive = ceil(log2(max_value)/8)
+
+    byte_encoding_params = [bytes_per_element_naive,'little']
+    byte_string = b''
+
+    for chunk in input_list:
+        byte_string += chunk.to_bytes(*byte_encoding_params)
+
+    #bbytes = bytes_per_element_naive.to_bytes(length=1, byteorder='little')
+    #print(f'Serialize: bytes per element: {bytes_per_element_naive}, bytes: {bbytes}')
+
+    return bytes_per_element_naive.to_bytes(length=1, byteorder='little') + byte_string
+
+
+def deserialize_naive(input_bytes: bytes):
+
+    #print(type(input_bytes))
+    #print(input_bytes)
+    #print(input_bytes[0])
+    bytes_per_element_naive = int(input_bytes[0])
+    #print(f'Bytes per element: {bytes_per_element_naive}')
+    output_list = []
+    for chunk in range(1,len(input_bytes),bytes_per_element_naive):
+        #print(chunk)
+        #print(int.from_bytes(input_bytes[chunk:chunk+bytes_per_element_naive], 'little'))
+        output_list.append(int.from_bytes(input_bytes[chunk:chunk+bytes_per_element_naive], 'little'))
+
+    return output_list
+
+if __name__ == "__main__":
+    sk = SecretKey()
+    pk = PublicKey(sk)
+    pk.savePublicKey()
+
+    msg = b'hello world'
+    sig = sk.sign(msg)
+
+    newpk = PublicKey()
+    newpk.loadPublicKey()
+    print(newpk.verify(msg, sig))
