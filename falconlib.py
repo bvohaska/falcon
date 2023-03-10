@@ -406,6 +406,7 @@ class SecretKey:
         with open(path, 'w') as f:
             f.write(paramsSet+bytesf+bytesg+bytesF+bytesG)
 
+
 class PublicKey(SecretKey):
     """
     This class contains methods for performing public key operations in Falcon.
@@ -426,7 +427,7 @@ class PublicKey(SecretKey):
         rep += "h = {h}\n".format(h=self.h)
         return rep
     
-    def loadPublicKey(self, path:str = './falconPubKey.pub'):
+    def loadPublicKey(self, path:str = './falconPublicKey.pub'):
         from base64 import b85decode
         with open(path, 'rb') as f:
             publicKeyBytes = f.read()
@@ -445,7 +446,7 @@ class PublicKey(SecretKey):
         # load h
         self.h = h
 
-    def savePublicKey(self, path:str = './falconPubKey.pub', out:str = 'disk'):
+    def savePublicKey(self, path:str = './falconPublicKey.pub', out:str = 'disk'):
         from base64 import b85encode
         
         paramsSet = 'PARAMS:'+str(self.n)
@@ -490,6 +491,7 @@ def deserialize_naive(input_bytes: bytes, signed:bool = False) -> list:
         output_list.append(int.from_bytes(input_bytes[chunk:chunk+bytes_per_element_naive], 'little', signed=signed))
 
     return output_list
+
 
 if __name__ == "__main__":
     sk = SecretKey()
