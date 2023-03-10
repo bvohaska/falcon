@@ -1,5 +1,5 @@
 from sys import path
 
-path.append("./falconlib")
+path.append("./falcon")
 
-import falcon
+import falconlib

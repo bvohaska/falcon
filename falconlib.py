@@ -445,15 +445,18 @@ class PublicKey(SecretKey):
         # load h
         self.h = h
 
-    def savePublicKey(self, path:str = './falconPubKey.pub'):
+    def savePublicKey(self, path:str = './falconPubKey.pub', out:str = 'disk'):
         from base64 import b85encode
         
         paramsSet = 'PARAMS:'+str(self.n)
         publicPolynomial = 'POLY:' + b85encode(serialize_naive(self.h)).decode('ascii')
         
-        with open(path,'w') as f:
-            f.write(paramsSet+publicPolynomial)
-    
+        if out == 'disk':
+            with open(path,'w') as f:
+                f.write(paramsSet+publicPolynomial)
+        if out == 'memory':
+            return paramsSet+publicPolynomial
+        
 
 def serialize_naive(input_list:list[int] = [], signed:bool = False) -> bytes:
     from math import ceil, log2
