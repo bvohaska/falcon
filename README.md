@@ -16,7 +16,7 @@ This repository contains the following files (roughly in order of dependency):
 1. [`ntt.py`](ntt.py) implements the NTT over Z<sub>q</sub>[x] / (x<sup>n</sup> + 1)
 1. [`ntrugen.py`](ntrugen.py) generate polynomials f,g,F,G in Z[x] / (x<sup>n</sup> + 1) such that f G - g F = q
 1. [`ffsampling.py`](ffsampling.py) implements the fast Fourier sampling algorithm
-1. [`falcon.py`](falcon.py) implements Falcon
+1. [`falconlib.py`](falcon.py) implements Falcon
 1. [`test.py`](test.py) implements tests to check that everything is properly implemented
 
 
@@ -29,6 +29,7 @@ This repository contains the following files (roughly in order of dependency):
    - To sign a message m with a pre-chosen 40-byte salt: `sig = sk.sign(m, salt)`
    Note that the message MUST be a byte array or byte string.
 1. We can also verify signatures: `pk.verify(m, sig)`
+1. We can also save and load private and public keys using naive serializations
 
 Example in Python 3.6.9:
 
@@ -36,6 +37,10 @@ Example in Python 3.6.9:
 >>> import falcon
 >>> sk = falcon.SecretKey(512)
 >>> pk = falcon.PublicKey(sk)
+>>> pk.savePublicKey('./path/to/file.pub')
+>>> sk.saveSecretKey('./path/to/file.key')
+>>> pk.loadPublicKey('./path/to/file.pub')
+>>> sk.loadSecretKey('./path/to/file.key')
 >>> sk
 Private key for n = 512:
 
