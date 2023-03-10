@@ -1,0 +1,5 @@
+# Used for NTT calculations
+numpy
+
+# Falcon uses the SHAKE-256 implementation from this libary
+pycryptodome
